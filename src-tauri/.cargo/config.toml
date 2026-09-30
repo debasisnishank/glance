@@ -1,0 +1,3 @@
+[env]
+# Match the Swift bridge objects and the bundle's minimumSystemVersion.
+MACOSX_DEPLOYMENT_TARGET = "13.0"
