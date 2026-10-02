@@ -28,6 +28,7 @@ pub fn run() {
             commands::capture_region,
             commands::cancel_selection,
             commands::close_session,
+            commands::set_overlay_collapsed,
             commands::screen_permission,
             commands::request_screen_permission,
             commands::open_screen_settings,

@@ -29,6 +29,8 @@ export const ipc = {
   cancelSelection: () => invoke<void>("cancel_selection"),
   closeSession: (sessionId: string | null) =>
     invoke<void>("close_session", { sessionId }),
+  setOverlayCollapsed: (collapsed: boolean) =>
+    invoke<void>("set_overlay_collapsed", { collapsed }),
   screenPermission: () => invoke<boolean>("screen_permission"),
   requestScreenPermission: () => invoke<boolean>("request_screen_permission"),
   openScreenSettings: () => invoke<void>("open_screen_settings"),

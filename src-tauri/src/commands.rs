@@ -68,6 +68,12 @@ pub fn close_session(app: AppHandle, sessions: State<'_, Sessions>, session_id: 
     }
 }
 
+/// Minimize the overlay to a draggable header bar, or expand it again.
+#[tauri::command]
+pub fn set_overlay_collapsed(app: AppHandle, collapsed: bool) -> Result<(), String> {
+    capture::set_overlay_collapsed(&app, collapsed)
+}
+
 #[tauri::command]
 pub fn screen_permission() -> bool {
     permission::has_access()

@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Selector and overlay windows",
   "windows": ["selector", "overlay"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
 }
