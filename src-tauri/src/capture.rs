@@ -8,13 +8,14 @@ use std::time::Duration;
 use base64::Engine;
 use image::{imageops, ImageFormat, RgbaImage};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, LogicalPosition, Manager, Monitor, Runtime, WebviewWindow};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, Runtime, WebviewWindow};
 
 pub const SELECTOR: &str = "selector";
 pub const OVERLAY: &str = "overlay";
 
 const OVERLAY_W: f64 = 440.0;
 const OVERLAY_H: f64 = 460.0;
+const OVERLAY_COLLAPSED_H: f64 = 56.0;
 const OVERLAY_GAP: f64 = 12.0;
 const SCREEN_MARGIN: f64 = 8.0;
 const THUMB_EDGE: u32 = 640;
@@ -170,6 +171,7 @@ pub fn show_overlay_near<R: Runtime>(app: &AppHandle<R>, selection: Rect) -> Res
         .get_webview_window(OVERLAY)
         .ok_or("overlay window missing")?;
 
+    let _ = overlay.set_size(LogicalSize::new(OVERLAY_W, OVERLAY_H));
     if let Some(bounds) = monitor_bounds_for(app, selection) {
         let pos = overlay_position(selection, bounds);
         overlay
@@ -180,6 +182,17 @@ pub fn show_overlay_near<R: Runtime>(app: &AppHandle<R>, selection: Rect) -> Res
     }
     overlay.show().map_err(|e| e.to_string())?;
     overlay.set_focus().map_err(|e| e.to_string())
+}
+
+/// Shrink the overlay to its header bar (or restore it), keeping its top-left.
+pub fn set_overlay_collapsed<R: Runtime>(app: &AppHandle<R>, collapsed: bool) -> Result<(), String> {
+    let overlay = app
+        .get_webview_window(OVERLAY)
+        .ok_or("overlay window missing")?;
+    let height = if collapsed { OVERLAY_COLLAPSED_H } else { OVERLAY_H };
+    overlay
+        .set_size(LogicalSize::new(OVERLAY_W, height))
+        .map_err(|e| e.to_string())
 }
 
 fn overlay_position(sel: Rect, mon: Rect) -> (f64, f64) {

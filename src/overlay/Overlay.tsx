@@ -15,24 +15,34 @@ type View =
 
 export function Overlay() {
   const [view, setView] = useState<View>({ kind: "idle" });
+  const [collapsed, setCollapsed] = useState(false);
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((c) => {
+      void ipc.setOverlayCollapsed(!c);
+      return !c;
+    });
+  }, []);
 
   const close = useCallback(() => {
     const sessionId = view.kind === "captured" ? view.sessionId : null;
     setView({ kind: "idle" });
+    setCollapsed(false);
     void ipc.closeSession(sessionId);
   }, [view]);
 
   useEffect(() => {
     const subs = [
-      on("glance://captured", (e) =>
+      on("glance://captured", (e) => {
+        setCollapsed(false);
         setView({
           kind: "captured",
           sessionId: e.session_id,
           thumb: `data:image/png;base64,${e.thumb_b64}`,
           width: e.width,
           height: e.height,
-        }),
-      ),
+        });
+      }),
       on("glance://permission", (e) => {
         if (!e.granted) setView({ kind: "permission" });
       }),
@@ -64,14 +74,26 @@ export function Overlay() {
           >
             Glance
           </h1>
-          <button
-            onClick={close}
-            className="rounded-md px-2 py-0.5 text-[11px] text-stone-500 hover:bg-black/5 dark:text-stone-400 dark:hover:bg-white/10"
-          >
-            Esc
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? "Expand" : "Minimize"}
+              title={collapsed ? "Expand" : "Minimize"}
+              className="rounded-md px-2 py-0.5 text-[13px] leading-none text-stone-500 hover:bg-black/5 dark:text-stone-400 dark:hover:bg-white/10"
+            >
+              {collapsed ? "▢" : "–"}
+            </button>
+            <button
+              onClick={close}
+              className="rounded-md px-2 py-0.5 text-[11px] text-stone-500 hover:bg-black/5 dark:text-stone-400 dark:hover:bg-white/10"
+            >
+              Esc
+            </button>
+          </div>
         </header>
-        <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">
+        <div
+          className={`min-h-0 flex-1 flex-col px-4 pb-4 ${collapsed ? "hidden" : "flex"}`}
+        >
           {view.kind === "captured" && <Captured view={view} />}
           {view.kind === "permission" && <Permission />}
           {view.kind === "error" && (
