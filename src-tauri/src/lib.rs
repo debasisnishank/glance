@@ -1,14 +1,20 @@
-//! App setup: windows, plugins, tray.
+//! App setup: state, windows, plugins, tray.
 
 mod capture;
 mod commands;
+mod config;
 mod hotkey;
+mod preprocess;
+mod provider;
 mod session;
+
+use std::sync::RwLock;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
-use tauri::{Manager, RunEvent};
+use tauri::{Manager, RunEvent, WindowEvent};
 
+use config::{ConfigState, Secrets};
 use session::Sessions;
 
 /// NSScreenSaverWindowLevel: above the menu bar and full-screen apps.
@@ -20,20 +26,46 @@ const OVERLAY_LEVEL: isize = 101;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let cfg = config::load();
+    let hotkey_accel = cfg.hotkey.capture.clone();
+
     let app = tauri::Builder::default()
         .plugin(hotkey::plugin())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Sessions::default())
+        .manage(ConfigState(RwLock::new(cfg)))
+        .manage(Secrets::default())
         .invoke_handler(tauri::generate_handler![
             commands::start_capture,
             commands::capture_region,
+            commands::run_action,
+            commands::ask,
+            commands::copy_last,
             commands::cancel_selection,
             commands::close_session,
             commands::set_overlay_collapsed,
+            commands::get_config,
+            commands::set_config,
+            commands::set_api_key,
+            commands::clear_api_key,
+            commands::has_api_key,
+            commands::cli_status,
+            commands::list_custom_models,
+            commands::open_settings,
             commands::screen_permission,
             commands::request_screen_permission,
             commands::open_screen_settings,
         ])
-        .setup(|app| {
+        .on_window_event(|window, event| {
+            // Settings is reopened from the tray; hide instead of destroying it.
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == commands::SETTINGS {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
+        .setup(move |app| {
             #[cfg(target_os = "macos")]
             {
                 // Menu-bar app: no Dock icon, no app switcher entry.
@@ -46,16 +78,19 @@ pub fn run() {
                 }
             }
 
-            if let Err(err) = hotkey::register(app.handle(), hotkey::DEFAULT_CAPTURE) {
+            if let Err(err) = hotkey::register(app.handle(), &hotkey_accel) {
                 eprintln!("[glance] {err}");
             }
 
             let capture_item = MenuItemBuilder::with_id("capture", "Capture Region")
-                .accelerator(hotkey::DEFAULT_CAPTURE)
+                .accelerator(&hotkey_accel)
+                .build(app)?;
+            let settings_item = MenuItemBuilder::with_id("settings", "Settings…")
+                .accelerator("CmdOrCtrl+,")
                 .build(app)?;
             let quit_item = MenuItemBuilder::with_id("quit", "Quit Glance").build(app)?;
             let menu = MenuBuilder::new(app)
-                .items(&[&capture_item])
+                .items(&[&capture_item, &settings_item])
                 .separator()
                 .items(&[&quit_item])
                 .build()?;
@@ -65,6 +100,7 @@ pub fn run() {
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "capture" => capture::begin_selection(app),
+                    "settings" => commands::show_settings(app),
                     "quit" => app.exit(0),
                     _ => {}
                 });
@@ -72,6 +108,12 @@ pub fn run() {
                 tray = tray.icon(icon.clone());
             }
             tray.build(app)?;
+
+            // First run: nothing works without a key, so ask for one up front.
+            let provider = app.state::<ConfigState>().get().models.provider;
+            if provider == "anthropic" && app.state::<Secrets>().get("anthropic").is_none() {
+                commands::show_settings(app.handle());
+            }
             Ok(())
         })
         .build(tauri::generate_context!())

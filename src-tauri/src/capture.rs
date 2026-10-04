@@ -10,11 +10,13 @@ use image::{imageops, ImageFormat, RgbaImage};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, Runtime, WebviewWindow};
 
+use crate::preprocess::{self, PreparedImage};
+
 pub const SELECTOR: &str = "selector";
 pub const OVERLAY: &str = "overlay";
 
 const OVERLAY_W: f64 = 440.0;
-const OVERLAY_H: f64 = 460.0;
+const OVERLAY_H: f64 = 580.0;
 const OVERLAY_COLLAPSED_H: f64 = 56.0;
 const OVERLAY_GAP: f64 = 12.0;
 const SCREEN_MARGIN: f64 = 8.0;
@@ -32,7 +34,8 @@ pub struct Rect {
 }
 
 pub struct Captured {
-    pub png: Vec<u8>,
+    /// Downscaled and encoded for upload.
+    pub prepared: PreparedImage,
     pub thumb_png: Vec<u8>,
     pub width: u32,
     pub height: u32,
@@ -42,6 +45,15 @@ pub struct Captured {
 pub struct CapturedEvent {
     pub session_id: String,
     pub thumb_b64: String,
+    pub width: u32,
+    pub height: u32,
+    /// What will actually be uploaded, after downscaling.
+    pub upload: UploadInfo,
+}
+
+#[derive(Clone, Serialize)]
+pub struct UploadInfo {
+    pub media_type: &'static str,
     pub width: u32,
     pub height: u32,
 }
@@ -118,11 +130,11 @@ pub async fn grab_after_hide<R: Runtime>(
 fn grab(rect: Rect) -> Result<Captured, String> {
     let img = grab_rgba(rect)?;
     let (width, height) = img.dimensions();
-    let png = encode_png(&img)?;
+    let prepared = preprocess::prepare(&img)?;
     let (tw, th) = fit(width, height, THUMB_EDGE);
     let thumb_png = encode_png(&imageops::thumbnail(&img, tw, th))?;
     Ok(Captured {
-        png,
+        prepared,
         thumb_png,
         width,
         height,
@@ -395,7 +407,7 @@ mod tests {
         let sel = Rect { x: 50.0, y: 800.0, width: 1300.0, height: 90.0 };
         let (x, y) = overlay_position(sel, MON);
         assert!(x >= 8.0 && x + 440.0 <= 1432.0);
-        assert_eq!(y, 900.0 - 8.0 - 460.0);
+        assert_eq!(y, 900.0 - 8.0 - 580.0);
     }
 }
 
@@ -412,14 +424,19 @@ mod live {
         let rect = Rect { x: 0.0, y: 0.0, width: 400.0, height: 300.0 };
         let started = std::time::Instant::now();
         let captured = grab(rect).expect("capture");
+        let p = &captured.prepared;
         eprintln!(
-            "captured {}x{} -> {} KB png in {:?}",
+            "captured {}x{} -> {} {}x{} ({} KB b64) in {:?}",
             captured.width,
             captured.height,
-            captured.png.len() / 1024,
+            p.media_type,
+            p.width,
+            p.height,
+            p.b64.len() / 1024,
             started.elapsed()
         );
         assert!(captured.width >= 400 && captured.height >= 300);
-        assert_eq!(&captured.png[..8], b"\x89PNG\r\n\x1a\n");
+        assert!(p.width.max(p.height) <= preprocess::MAX_EDGE);
+        assert!(!p.b64.is_empty());
     }
 }

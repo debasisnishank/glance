@@ -1,7 +1,15 @@
 import { windowLabel } from "./lib/ipc";
 import { Overlay } from "./overlay/Overlay";
 import { Selector } from "./selector/Selector";
+import { Settings } from "./settings/Settings";
 
 export default function App() {
-  return windowLabel() === "selector" ? <Selector /> : <Overlay />;
+  switch (windowLabel()) {
+    case "selector":
+      return <Selector />;
+    case "settings":
+      return <Settings />;
+    default:
+      return <Overlay />;
+  }
 }
